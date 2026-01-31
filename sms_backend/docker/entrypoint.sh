@@ -78,10 +78,16 @@ run_migrations() {
     python manage.py migrate --noinput
 }
 
+
 # Collect static files
 collect_static() {
+    log_info "Ensuring static directories permissions..."
+    mkdir -p /app/staticfiles /app/media /app/logs
+    chown -R sms:sms /app/staticfiles /app/media /app/logs || true
+
     log_info "Collecting static files..."
-    python manage.py collectstatic --noinput --clear
+    python manage.py collectstatic --noinput || true
+
 }
 
 # Create superuser if needed

@@ -57,8 +57,6 @@ DATABASES = {
     }
 }
 
-# Database connection pooling
-DATABASES['default']['OPTIONS']['MAX_CONNS'] = 20
 
 # =============================================================================
 # CACHE

@@ -20,9 +20,9 @@ RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 # Install Python dependencies
-COPY requirements/production.txt /tmp/requirements.txt
+COPY requirements /tmp/requirements
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r /tmp/requirements.txt
+    pip install --no-cache-dir -r /tmp/requirements/production.txt
 
 # =============================================================================
 # Production Stage
@@ -93,9 +93,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Install Python dependencies
-COPY requirements/development.txt /tmp/requirements.txt
+COPY requirements /tmp/requirements
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r /tmp/requirements.txt
+    pip install --no-cache-dir -r /tmp/requirements/production.txt
 
 # Environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
