@@ -128,7 +128,39 @@ docker-compose exec web python manage.py createsuperuser
 Used to access Django Admin.
 
 ---
+✅ Step 10: Restart Stack (Final Clean Start)
+docker-compose restart
+✅ Step 11: Health Checks
+curl http://localhost/health/
 
+Expected:
+
+{"status": "ok"}
+
+Check logs:
+
+docker-compose logs -f web
+docker-compose logs -f celery_worker
+🌐 Access URLs
+
+Admin: http://<EC2_PUBLIC_IP>/admin/
+
+API: http://<EC2_PUBLIC_IP>/
+
+Flower: http://<EC2_PUBLIC_IP>:5555
+
+🧠 Production Rules
+
+.env → server only
+
+No manual DB changes
+
+Always redeploy with:
+
+git pull
+docker-compose build
+docker-compose up -d
+docker-compose exec web python manage.py migrate
 ## 🗂️ Step 7: Collect Static Files (Optional)
 
 Only required if:
