@@ -1,130 +1,78 @@
 #!/bin/bash
 # =============================================================================
-# SMS Docker Entrypoint Script
+# SMS Docker Entrypoint Script (Production, Role-Aware)
 # =============================================================================
 
 set -e
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+ROLE=${SERVICE_ROLE:-web}
 
-# Logging functions
-log_info() {
-    echo -e "${GREEN}[INFO]${NC} $1"
-}
+echo "[INFO] Container role: ${ROLE}"
 
-log_warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
-}
+# -----------------------------------------------------------------------------
+# Wait for PostgreSQL
+# -----------------------------------------------------------------------------
+echo "[INFO] Waiting for database..."
+while ! nc -z db 5432; do
+  sleep 1
+done
+echo "[INFO] Database is ready"
 
-log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
-
-# Wait for database
-wait_for_db() {
-    log_info "Waiting for database..."
-    
-    until python -c "
-import psycopg2
-import sys
-try:
-    conn = psycopg2.connect(
-        dbname='${DB_NAME}',
-        user='${DB_USER}',
-        password='${DB_PASSWORD}',
-        host='${DB_HOST}',
-        port='${DB_PORT}'
-    )
-    conn.close()
-    sys.exit(0)
-except psycopg2.OperationalError:
-    sys.exit(1)
-" 2>/dev/null; do
-        log_warn "Database is unavailable - sleeping"
-        sleep 1
-    done
-    
-    log_info "Database is ready!"
-}
-
+# -----------------------------------------------------------------------------
 # Wait for Redis
-wait_for_redis() {
-    log_info "Waiting for Redis..."
-    
-    until python -c "
-import redis
-import sys
-try:
-    r = redis.from_url('${REDIS_URL}')
-    r.ping()
-    sys.exit(0)
-except:
-    sys.exit(1)
-" 2>/dev/null; do
-        log_warn "Redis is unavailable - sleeping"
-        sleep 1
-    done
-    
-    log_info "Redis is ready!"
-}
+# -----------------------------------------------------------------------------
+echo "[INFO] Waiting for redis..."
+while ! nc -z redis 6379; do
+  sleep 1
+done
+echo "[INFO] Redis is ready"
 
-# Run migrations
-run_migrations() {
-    log_info "Running database migrations..."
-    python manage.py migrate --noinput
-}
+# -----------------------------------------------------------------------------
+# WEB ROLE (Django + Gunicorn)
+# -----------------------------------------------------------------------------
+if [ "$ROLE" = "web" ]; then
+  echo "[INFO] Running migrations..."
+  python manage.py migrate --noinput
 
+  echo "[INFO] Preparing static/media/log directories..."
+  mkdir -p /app/staticfiles /app/media /app/logs
+  chown -R sms:sms /app/staticfiles /app/media /app/logs || true
 
-# Collect static files
-collect_static() {
-    log_info "Ensuring static directories permissions..."
-    mkdir -p /app/staticfiles /app/media /app/logs
-    chown -R sms:sms /app/staticfiles /app/media /app/logs || true
+  echo "[INFO] Collecting static files..."
+  python manage.py collectstatic --noinput
 
-    log_info "Collecting static files..."
-    python manage.py collectstatic --noinput || true
+  if [ -n "$DJANGO_SUPERUSER_EMAIL" ] && [ -n "$DJANGO_SUPERUSER_PASSWORD" ]; then
+    echo "[INFO] Creating superuser if not exists..."
+    python manage.py createsuperuser --noinput || true
+  fi
 
-}
+  echo "[INFO] Starting Gunicorn..."
+  exec gunicorn config.wsgi:application \
+    --bind 0.0.0.0:8000 \
+    --workers 3 \
+    --timeout 120
+fi
 
-# Create superuser if needed
-create_superuser() {
-    if [ "$DJANGO_SUPERUSER_EMAIL" ] && [ "$DJANGO_SUPERUSER_PASSWORD" ]; then
-        log_info "Creating superuser..."
-        python manage.py createsuperuser --noinput 2>/dev/null || log_warn "Superuser already exists"
-    fi
-}
+# -----------------------------------------------------------------------------
+# CELERY WORKER ROLE
+# -----------------------------------------------------------------------------
+if [ "$ROLE" = "worker" ]; then
+  echo "[INFO] Starting Celery worker..."
+  exec celery -A config.celery worker -l info --concurrency=4
+fi
 
-# Load initial data
-load_initial_data() {
-    if [ "$LOAD_INITIAL_DATA" = "true" ]; then
-        log_info "Loading initial data..."
-        python manage.py loaddata fixtures/initial_data.json 2>/dev/null || log_warn "No initial data found"
-    fi
-}
+# -----------------------------------------------------------------------------
+# CELERY BEAT ROLE
+# -----------------------------------------------------------------------------
+if [ "$ROLE" = "beat" ]; then
+  echo "[INFO] Starting Celery beat..."
+  exec celery -A config.celery beat -l info \
+    --scheduler django_celery_beat.schedulers:DatabaseScheduler
+fi
 
-# Main execution
-main() {
-    log_info "Starting SMS application..."
-    
-    # Wait for dependencies
-    wait_for_db
-    wait_for_redis
-    
-    # Run setup tasks
-    run_migrations
-    collect_static
-    create_superuser
-    load_initial_data
-    
-    log_info "Setup complete! Starting application..."
-    
-    # Execute the passed command
-    exec "$@"
-}
+# -----------------------------------------------------------------------------
+# FALLBACK (should not happen)
+# -----------------------------------------------------------------------------
+echo "[ERROR] Unknown SERVICE_ROLE=${ROLE}"
+exit 1
 
-# Run main function
-main "$@"

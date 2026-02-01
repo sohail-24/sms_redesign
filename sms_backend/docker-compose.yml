@@ -1,13 +1,13 @@
 # =============================================================================
-# School Management System - Docker Compose Configuration
+# School Management System - Docker Compose (Production, Role-Aware)
 # =============================================================================
 
 version: '3.8'
 
 services:
-  # ===========================================================================
+  # ==========================================================================
   # Database Service
-  # ===========================================================================
+  # ==========================================================================
   db:
     image: postgres:15-alpine
     container_name: sms_db
@@ -28,9 +28,9 @@ services:
     networks:
       - sms_network
 
-  # ===========================================================================
-  # Redis Service (Cache & Message Broker)
-  # ===========================================================================
+  # ==========================================================================
+  # Redis Service (Cache & Broker)
+  # ==========================================================================
   redis:
     image: redis:7-alpine
     container_name: sms_redis
@@ -48,9 +48,9 @@ services:
     networks:
       - sms_network
 
-  # ===========================================================================
-  # Django Application
-  # ===========================================================================
+  # ==========================================================================
+  # Django Web (Gunicorn)
+  # ==========================================================================
   web:
     build:
       context: .
@@ -63,6 +63,7 @@ services:
       - media:/app/media
       - logs:/app/logs
     environment:
+      - SERVICE_ROLE=web
       - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY}
       - DJANGO_DEBUG=${DJANGO_DEBUG:-False}
       - DJANGO_ALLOWED_HOSTS=${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
@@ -98,9 +99,9 @@ services:
     networks:
       - sms_network
 
-  # ===========================================================================
+  # ==========================================================================
   # Celery Worker
-  # ===========================================================================
+  # ==========================================================================
   celery_worker:
     build:
       context: .
@@ -108,11 +109,11 @@ services:
       target: production
     container_name: sms_celery_worker
     restart: unless-stopped
-    command: celery -A config.celery worker -l info --concurrency=4
     volumes:
       - media:/app/media
       - logs:/app/logs
     environment:
+      - SERVICE_ROLE=worker
       - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY}
       - DJANGO_DEBUG=${DJANGO_DEBUG:-False}
       - DB_NAME=${DB_NAME:-sms_db}
@@ -130,9 +131,9 @@ services:
     networks:
       - sms_network
 
-  # ===========================================================================
-  # Celery Beat (Scheduler)
-  # ===========================================================================
+  # ==========================================================================
+  # Celery Beat
+  # ==========================================================================
   celery_beat:
     build:
       context: .
@@ -140,10 +141,10 @@ services:
       target: production
     container_name: sms_celery_beat
     restart: unless-stopped
-    command: celery -A config.celery beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
     volumes:
       - logs:/app/logs
     environment:
+      - SERVICE_ROLE=beat
       - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY}
       - DJANGO_DEBUG=${DJANGO_DEBUG:-False}
       - DB_NAME=${DB_NAME:-sms_db}
@@ -162,9 +163,9 @@ services:
     networks:
       - sms_network
 
-  # ===========================================================================
+  # ==========================================================================
   # Nginx Reverse Proxy
-  # ===========================================================================
+  # ==========================================================================
   nginx:
     image: nginx:alpine
     container_name: sms_nginx
@@ -182,9 +183,9 @@ services:
     networks:
       - sms_network
 
-  # ===========================================================================
-  # Flower (Celery Monitoring) - Optional
-  # ===========================================================================
+  # ==========================================================================
+  # Flower (Celery Monitoring)
+  # ==========================================================================
   flower:
     image: mher/flower:latest
     container_name: sms_flower
@@ -207,15 +208,10 @@ services:
 
 volumes:
   postgres_data:
-    driver: local
   redis_data:
-    driver: local
   staticfiles:
-    driver: local
   media:
-    driver: local
   logs:
-    driver: local
 
 # =============================================================================
 # Networks
@@ -224,3 +220,4 @@ volumes:
 networks:
   sms_network:
     driver: bridge
+

@@ -17,53 +17,44 @@ from django.db import connections
 from django.core.cache import cache
 import redis
 
+from django.http import JsonResponse
+
+def health_liveness(request):
+    return JsonResponse({"status": "ok"})
+
 
 @api_view(['GET'])
 def health_check(request):
     """
-    Health check endpoint for monitoring.
+    Full health check for diagnostics (SAFE, non-blocking).
     """
     checks = {
-        'status': 'healthy',
-        'timestamp': __import__('django.utils.timezone').utils.timezone.now().isoformat(),
-        'services': {}
+        "status": "healthy",
+        "services": {}
     }
-    
-    # Check database
+
+    # Database
     try:
-        connections['default'].cursor().execute('SELECT 1')
-        checks['services']['database'] = {'status': 'healthy'}
+        connections['default'].cursor().execute("SELECT 1")
+        checks["services"]["database"] = "ok"
     except Exception as e:
-        checks['services']['database'] = {'status': 'unhealthy', 'error': str(e)}
-        checks['status'] = 'unhealthy'
-    
-    # Check cache
+        checks["services"]["database"] = str(e)
+        checks["status"] = "unhealthy"
+
+    # Cache
     try:
-        cache.set('health_check', 'ok', 10)
-        value = cache.get('health_check')
-        if value == 'ok':
-            checks['services']['cache'] = {'status': 'healthy'}
-        else:
-            checks['services']['cache'] = {'status': 'unhealthy', 'error': 'Cache read failed'}
-            checks['status'] = 'unhealthy'
+        cache.set("health_check", "ok", 5)
+        checks["services"]["cache"] = "ok"
     except Exception as e:
-        checks['services']['cache'] = {'status': 'unhealthy', 'error': str(e)}
-        checks['status'] = 'unhealthy'
-    
-    # Check Celery (via Redis)
-    try:
-        from infrastructure.celery.celery_app import app
-        inspector = app.control.inspect()
-        stats = inspector.stats()
-        if stats:
-            checks['services']['celery'] = {'status': 'healthy', 'workers': len(stats)}
-        else:
-            checks['services']['celery'] = {'status': 'warning', 'message': 'No workers running'}
-    except Exception as e:
-        checks['services']['celery'] = {'status': 'unhealthy', 'error': str(e)}
-    
-    status_code = 200 if checks['status'] == 'healthy' else 503
-    return Response(checks, status=status_code)
+        checks["services"]["cache"] = str(e)
+        checks["status"] = "unhealthy"
+
+    return Response(
+        checks,
+        status=200 if checks["status"] == "healthy" else 503
+    )
+
+
 
 
 @api_view(['GET'])
@@ -91,12 +82,15 @@ def api_root(request):
 
 
 urlpatterns = [
+
+
+    path('health/', health_liveness, name='health_liveness'),
+    # Health check
+    path('health/full/', health_check, name='health_check'),
     # Admin
     path('admin/', admin.site.urls),
-    
-    # Health check
-    path('health/', health_check, name='health_check'),
-    
+   
+
     # API Root
     path('api/', api_root, name='api_root'),
     

@@ -72,7 +72,7 @@ EXPOSE 8000
 
 # Run entrypoint script
 ENTRYPOINT ["/app/docker/entrypoint.sh"]
-CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000"]
+
 
 # =============================================================================
 # Development Stage
