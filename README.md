@@ -74,6 +74,9 @@ CELERY_RESULT_BACKEND=redis://sms_redis:6379/0
 Always build images after a fresh pull:
 
 ```bash
+ chmod +x docker/entrypoint.sh
+```
+```bash
 docker-compose build
 ```
 
