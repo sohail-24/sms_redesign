@@ -45,6 +45,10 @@ Create the environment file:
 cp .env.example .env
 ```
 
+```bash
+openssl rand -base64 48
+```
+
 Edit `.env` with production values:
 
 ```env
